@@ -1,0 +1,83 @@
+# crawling
+library(twitteR)
+library(devtools)
+api_key = "oiVcJ7vwHYOtEFx5bimI5JFLk"
+api_secret = "l9TfdZbx4CxFZux7ngIDhBGZJ4xt623gnKdgDNWUjfKJsFKQrM"
+token = "1032834583-4NZUJYyrpNdWOhGtMM95Mzle6rnmmqHjuFDs1lZ"
+token_secret ="HViok8mRolS0FpHh1uKLTMvW3mX38GOZm9JOBzUSAGSsI"
+setup_twitter_oauth(api_key, api_secret, token, token_secret)
+pilkada = searchTwitter("pilkada", since="2017-01-01", n=9800)
+pilkadadf=twListToDF(pilkada)
+write.csv2(pilkadadf, "pilkada.csv", row.names=F)
+
+# wordcloud
+desc <- strsplit(pilkada$text, '\\W')
+desc <- unlist(desc)
+desc <- data.frame(table(desc))
+desc <- desc[order(-desc$Freq),]
+install.packages('wordcloud')
+library(wordcloud)
+wordcloud(words = desc$desc, freq = desc$Freq, max.words = 15)
+
+#define sentiment
+#Create Model
+import pandas as pd
+import csv
+import datetime
+import time
+import twitter
+import sys
+import urllib.request
+import json
+import re
+import numpy as np
+
+def clean_tweet(word):
+    take_out_1 = re.findall('http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+',word)
+    take_out_2 = re.findall('\W+',word)
+    take_out=take_out_1+take_out_2
+    for hit in range(0,len(take_out)):
+        word = word.replace(take_out[hit]," ")
+    return word
+
+def transform_expanded_url(url):
+    try:
+        all_expanded = url[1:].split(",")
+        res = ""
+        for expanded in all_expanded:
+            res = res+" "+urlparse(expanded).netloc
+        return res
+    except:
+        return "“
+return "“
+all_data = pd.read_csv(‘training_full.csv',sep=',', encoding='latin_1')
+stopword = pd.read_csv('stopword_id.csv',header=None)
+stop=stopword[0].values.tolist()
+tf_idf = TfidfVectorizer(min_df=3,  max_features=None, strip_accents='unicode',  
+        analyzer='word',ngram_range=(1, 1), use_idf=1,smooth_idf=1,sublinear_tf=1,stop_words=stop)
+tf_idf.fit(all_data['text'])
+all_data['transformed_text'] = tf_idf.transform(all_data.text)
+from sklearn.naive_bayes import MultinomialNB
+clf_0 = MultinomialNB()
+clf_1 = MultinomialNB()
+clf_2 = MultinomialNB()
+print(np.mean(cross_validation.cross_val_score(clf_0, tf_idf.transform(all_data['text']),all_data['sentiment_0'] , cv=5, scoring='roc_auc')))
+print(np.mean(cross_validation.cross_val_score(clf_1, tf_idf.transform(all_data['text']),all_data['sentiment_1'] , cv=5, scoring='roc_auc')))
+print(np.mean(cross_validation.cross_val_score(clf_2, tf_idf.transform(all_data['text']),all_data['sentiment_2'] , cv=5, scoring='roc_auc')))
+clf_0.fit(tf_idf.transform(all_data['text']),all_data['sentiment_0'])
+clf_1.fit(tf_idf.transform(all_data['text']),all_data['sentiment_1'])
+clf_2.fit(tf_idf.transform(all_data['text']),all_data['sentiment_2'])
+all_data['pred_0'] = clf_0.predict_proba(tf_idf.transform(all_data['text']))[:,1]
+all_data['pred_1'] = clf_1.predict_proba(tf_idf.transform(all_data['text']))[:,1]
+all_data['pred_2'] = clf_2.predict_proba(tf_idf.transform(all_data['text']))[:,1]
+
+#Testing
+all_data['pred_0'] = clf_0.predict_proba(tf_idf.transform(all_data['text']))[:,1]
+all_data['pred_1'] = clf_1.predict_proba(tf_idf.transform(all_data['text']))[:,1]
+all_data['pred_2'] = clf_2.predict_proba(tf_idf.transform(all_data['text']))[:,1]
+
+all_data['sentiment_prediction'] = all_data.apply(lambda x: float(np.argmax([x['pred_0'],x['pred_1'],x['pred_2']])) 
+                                            if np.max([x['pred_0'],x['pred_1'],x['pred_2']])>0.5 
+                                            else float(0), axis=1)
+all_data.to_csv("pilgub_sentimen.csv")
+
